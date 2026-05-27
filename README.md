@@ -1,6 +1,6 @@
 # chatGPTtoTerminalProxy
 
-Local file bridge for ChatGPT/Codex on macOS.
+Chat-first file bridge for ChatGPT/Codex on macOS.
 
 ## Starter Guide
 
@@ -8,65 +8,55 @@ Local file bridge for ChatGPT/Codex on macOS.
 
 - Use VS Code or Cursor
 - Open this repository folder
-- Open `.codex-inbox/command.txt`
+- Open `.codex-inbox/chat.txt`
 - Turn on autosave
 
 ### 2. Start the watcher
 
 ```bash
-chmod +x .codex-inbox/watch-codex.sh
-./.codex-inbox/watch-codex.sh
+chmod +x .codex-inbox/watch-chat-first.sh
+./.codex-inbox/watch-chat-first.sh
 ```
 
 The default config is in `.codex-inbox/config.json`.
-- `approvalLevel`: `trust` or `standard`
+- `workflow`: `chat-first`
+- `approvalLevel`: `standard`
 - `defaultButton`: `Run`
 - `notifyChatGPT`: `true`
 
-Return now selects `Run` in the approval dialog.
-`trust` is the low-friction preset for this project: still shows approval, but labels the mode clearly.
+Return selects `Run` in the approval dialog.
 
-### 3. Give ChatGPT this rule
+### 3. Use the chat-first flow
 
 ```text
-You control my local project through `.codex-inbox/command.txt`.
-Write exactly one raw shell command into that file when you want the daemon to run something.
-Rules:
-- raw command only
-- no markdown
-- no explanation
-- no destructive commands unless I explicitly ask
-- prefer project-local paths
-- wait for the terminal output after execution
+Write your prompt or investigation goal into `.codex-inbox/chat.txt`.
+Let the conversation grow in `.codex-inbox/conversation.md`.
+Use the terminal to inspect the repo, search for context, or test ideas.
+When you are ready to execute, write the final shell commands into `.codex-inbox/commands.txt`.
+The watcher will ask for approval, then run them in this project folder.
 ```
 
-### 4. Use it
+### 4. What gets written where
 
-1. Ask ChatGPT/Codex for the next command.
-2. It writes the command into `.codex-inbox/command.txt`.
-3. Approve the macOS dialog.
-4. Read the result in the terminal or in `.codex-inbox/log.txt`.
-
-## Project Layout
-
-- `.codex-inbox/command.txt` - writable command slot
-- `.codex-inbox/log.txt` - command output log
-- `.codex-inbox/config.json` - project approval settings
-- `.codex-inbox/watch-codex.sh` - approval + execution loop
+- `.codex-inbox/chat.txt` - prompt input
+- `.codex-inbox/conversation.md` - growing conversation and terminal output
+- `.codex-inbox/commands.txt` - final shell commands
+- `.codex-inbox/log.txt` - execution log
+- `.codex-inbox/config.json` - project workflow settings
+- `.codex-inbox/watch-chat-first.sh` - chat-first watcher
 - `.vscode/settings.json` - editor defaults for this workflow
 
 ## Good Project Defaults
 
-- Prefer one command per turn
-- Prefer non-destructive commands
-- Prefer project-local paths
-- Use Git from the start if this becomes real work
+- Prefer one prompt per turn
+- Prefer project-local investigation first
+- Expose terminal commands only at the end in `commands.txt`
+- Keep approvals human-visible
 - Check `git status` before approving bigger commands
 
 ## Safety
 
 - No blind `eval` path
 - Human approval is required before execution
-- `trust` is a project preset, not a bypass for command safety
 - `fswatch` is used when available, polling is the fallback
 - The completion ping is best effort and may fail if macOS automation is blocked
