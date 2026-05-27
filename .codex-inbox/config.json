@@ -2,5 +2,6 @@
   "workflow": "chat-first",
   "approvalLevel": "standard",
   "defaultButton": "Run",
-  "notifyChatGPT": true
+  "notifyChatGPT": true,
+  "runMode": "auto"
 }

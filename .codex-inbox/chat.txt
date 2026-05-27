@@ -1,1 +1,2 @@
 
+Add the music workflow now for the Fucking Snake project. Keep the bridge flow: document what changed in conversation.md, then expose only final project-local shell commands in commands.txt.
