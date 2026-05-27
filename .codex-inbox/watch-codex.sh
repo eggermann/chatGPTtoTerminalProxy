@@ -6,12 +6,42 @@ PROJECT_DIR="${PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
 INBOX_DIR="$PROJECT_DIR/.codex-inbox"
 PROXY_FILE="$INBOX_DIR/command.txt"
 LOG_FILE="$INBOX_DIR/log.txt"
+CONFIG_FILE="$INBOX_DIR/config.json"
+APPROVAL_LEVEL="standard"
+DIALOG_DEFAULT_BUTTON="Run"
+NOTIFY_CHATGPT="true"
+
+if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_FILE" ]; then
+  while IFS='=' read -r key value; do
+    case "$key" in
+      approvalLevel) APPROVAL_LEVEL="$value" ;;
+      defaultButton) DIALOG_DEFAULT_BUTTON="$value" ;;
+      notifyChatGPT) NOTIFY_CHATGPT="$value" ;;
+    esac
+  done < <(
+    python3 - "$CONFIG_FILE" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+for key in ("approvalLevel", "defaultButton", "notifyChatGPT"):
+    if key in data:
+        value = data[key]
+        if isinstance(value, bool):
+            value = str(value).lower()
+        print(f"{key}={value}")
+PY
+  )
+fi
 
 mkdir -p "$INBOX_DIR"
 touch "$PROXY_FILE" "$LOG_FILE"
 
 echo "AI/Codex project daemon running."
 echo "Project: $PROJECT_DIR"
+echo "Approval level: $APPROVAL_LEVEL"
+echo "Default action: $DIALOG_DEFAULT_BUTTON"
 echo "Watching: $PROXY_FILE"
 echo ""
 
@@ -26,10 +56,12 @@ run_command() {
   echo "$CMD"
   echo "----------------------------------------"
 
-  USER_CHOICE="$(osascript - "$CMD" <<'EOD' 2>/dev/null || true
+  USER_CHOICE="$(osascript - "$CMD" "$DIALOG_DEFAULT_BUTTON" "$APPROVAL_LEVEL" <<'EOD' 2>/dev/null || true
 on run argv
   set theCmd to item 1 of argv
-  display dialog "Run this command in project folder?" & return & return & theCmd buttons {"Cancel", "Run"} default button "Cancel" with title "Codex Command Approval"
+  set defaultButton to item 2 of argv
+  set approvalLevel to item 3 of argv
+  display dialog "Run this command in project folder?" & return & return & theCmd buttons {"Cancel", "Run"} default button defaultButton with title ("Codex Command Approval [" & approvalLevel & "]")
 end run
 EOD
 )"
@@ -48,11 +80,10 @@ EOD
       echo ""
     } 2>&1 | tee -a "$LOG_FILE"
 
-    if command -v pbcopy >/dev/null 2>&1; then
+    if [ "$NOTIFY_CHATGPT" = "true" ] && command -v pbcopy >/dev/null 2>&1; then
       printf '%s\n' "Done executing. Please read my terminal window now." | pbcopy
-    fi
 
-    osascript <<'EOD' 2>/dev/null || true
+      osascript <<'EOD' 2>/dev/null || true
 tell application "ChatGPT" to activate
 delay 0.4
 tell application "System Events"
@@ -62,7 +93,8 @@ tell application "System Events"
 end tell
 EOD
 
-    osascript -e "display notification \"Command finished. ChatGPT was notified.\" with title \"Codex Daemon\"" 2>/dev/null || true
+      osascript -e "display notification \"Command finished. ChatGPT was notified.\" with title \"Codex Daemon\"" 2>/dev/null || true
+    fi
   else
     echo "Cancelled by user."
     osascript -e "display notification \"Command cancelled.\" with title \"Codex Daemon\"" 2>/dev/null || true

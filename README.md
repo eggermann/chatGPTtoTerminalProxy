@@ -18,6 +18,13 @@ chmod +x .codex-inbox/watch-codex.sh
 ./.codex-inbox/watch-codex.sh
 ```
 
+The default config is in `.codex-inbox/config.json`.
+- `approvalLevel`: `standard`
+- `defaultButton`: `Run`
+- `notifyChatGPT`: `true`
+
+Return now selects `Run` in the approval dialog.
+
 ### 3. Give ChatGPT this rule
 
 ```text
@@ -43,6 +50,7 @@ Rules:
 
 - `.codex-inbox/command.txt` - writable command slot
 - `.codex-inbox/log.txt` - command output log
+- `.codex-inbox/config.json` - project approval settings
 - `.codex-inbox/watch-codex.sh` - approval + execution loop
 - `.vscode/settings.json` - editor defaults for this workflow
 
