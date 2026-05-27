@@ -19,11 +19,12 @@ chmod +x .codex-inbox/watch-codex.sh
 ```
 
 The default config is in `.codex-inbox/config.json`.
-- `approvalLevel`: `standard`
+- `approvalLevel`: `trust` or `standard`
 - `defaultButton`: `Run`
 - `notifyChatGPT`: `true`
 
 Return now selects `Run` in the approval dialog.
+`trust` is the low-friction preset for this project: still shows approval, but labels the mode clearly.
 
 ### 3. Give ChatGPT this rule
 
@@ -66,5 +67,6 @@ Rules:
 
 - No blind `eval` path
 - Human approval is required before execution
+- `trust` is a project preset, not a bypass for command safety
 - `fswatch` is used when available, polling is the fallback
 - The completion ping is best effort and may fail if macOS automation is blocked

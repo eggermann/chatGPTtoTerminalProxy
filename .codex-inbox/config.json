@@ -1,5 +1,5 @@
 {
-  "approvalLevel": "standard",
+  "approvalLevel": "trust",
   "defaultButton": "Run",
   "notifyChatGPT": true
 }

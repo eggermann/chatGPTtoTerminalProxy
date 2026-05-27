@@ -42,6 +42,9 @@ echo "AI/Codex project daemon running."
 echo "Project: $PROJECT_DIR"
 echo "Approval level: $APPROVAL_LEVEL"
 echo "Default action: $DIALOG_DEFAULT_BUTTON"
+if [ "$APPROVAL_LEVEL" = "trust" ]; then
+  echo "Mode: trusted project preset"
+fi
 echo "Watching: $PROXY_FILE"
 echo ""
 
