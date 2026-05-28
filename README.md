@@ -99,11 +99,12 @@ The watcher will ask for approval, then run them in this project folder.
 - `.codex-inbox/chat.txt` - prompt input
 - `.codex-inbox/memory.md` - short persistent memory
 - `.codex-inbox/conversation.md` - growing conversation and terminal output
-- `.codex-inbox/last-output.md` - latest command output snapshot
+- `.codex-inbox/last-output.md` - latest command output snapshot with `session_id`, atomically replaced after completion
 - `.codex-inbox/commands.txt` - final shell commands, kept visible after run
 - `.codex-inbox/log.txt` - execution log
 - `.codex-inbox/config.json` - project workflow settings
 - `.codex-inbox/watch-chat-first.sh` - chat-first watcher
+- `.codex-inbox/capture-output.sh` - helper for manual terminals
 - `.vscode/settings.json` - editor defaults for this workflow
 
 Legacy command bridge files were removed from this branch for clarity.
@@ -116,6 +117,10 @@ Legacy command bridge files were removed from this branch for clarity.
 - Keep `commands.txt` visible; the watcher dedupes by content hash
 - Keep `memory.md` tiny and durable
 - Read `last-output.md` before deciding the next command
+- `last-output.md` is the output trigger; watcher pings ChatGPT after it changes
+- the file is replaced only after the command finishes
+- the header includes `session_id`, `source`, and `command`
+- For manual terminals, use `.codex-inbox/capture-output.sh "<command>"`
 - Keep approvals human-visible
 - Check `git status` before approving bigger commands
 

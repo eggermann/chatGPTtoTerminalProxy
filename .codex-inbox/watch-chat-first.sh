@@ -138,6 +138,14 @@ PY
   fi
 }
 
+generate_session_id() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen
+  else
+    printf '%s-%s-%s' "$(date +%s)" "$$" "$RANDOM"
+  fi
+}
+
 wait_for_file_stable() {
   local file="$1"
   local delay="${2:-0.7}"
@@ -203,6 +211,27 @@ EOD
   fi
 }
 
+process_last_output_file() {
+  local output_block="$1"
+  local output_hash last_output_hash
+
+  output_hash="$(hash_text "$output_block")"
+  last_output_hash="$(read_state last_output_hash)"
+
+  if [ "$output_hash" = "$last_output_hash" ]; then
+    return 0
+  fi
+
+  if ! printf '%s' "$output_block" | grep -q '[^[:space:]]'; then
+    return 0
+  fi
+
+  append_conversation "output" "$output_block"
+  write_state "last_output_hash" "$output_hash"
+  echo "Terminal output updated."
+  notify_chatgpt_done
+}
+
 process_chat_prompt() {
   local chat_prompt="$1"
   local prompt_hash
@@ -217,8 +246,22 @@ process_chat_prompt() {
 
 run_commands() {
   local command_block="$1"
+  local snapshot_file session_id
+
+  session_id="$(generate_session_id)"
+
+  snapshot_file="$(mktemp -t codex-output.XXXXXXXXXX.md)" || {
+    echo "Could not create output snapshot file." | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE"
+    return 1
+  }
+
+  trap 'rm -f "$snapshot_file"' RETURN
 
   {
+    echo "session_id: $session_id"
+    echo "source: watcher-inline"
+    echo "command:"
+    printf '%s\n' "$command_block"
     echo ""
     echo "[$(date)] Running commands:"
     echo "$command_block"
@@ -229,14 +272,17 @@ run_commands() {
     echo "Exit code: $EXIT_CODE"
     echo "[$(date)] Done"
     echo ""
-  } 2>&1 | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE" | tee "$LAST_OUTPUT_FILE"
+  } 2>&1 | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE" | tee "$snapshot_file"
 
-  notify_chatgpt_done
+  mv -f "$snapshot_file" "$LAST_OUTPUT_FILE"
+  trap - RETURN
 }
 
 run_commands_in_new_terminal() {
   local command_block="$1"
-  local tmp_command tmp_runner
+  local tmp_command tmp_runner session_id
+
+  session_id="$(generate_session_id)"
 
   tmp_command="$(mktemp -t codex-command.XXXXXXXXXX.sh)" || {
     echo "Could not create temporary command file." | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE"
@@ -260,6 +306,10 @@ CONVERSATION_FILE=$(printf '%q' "$CONVERSATION_FILE")
 LAST_OUTPUT_FILE=$(printf '%q' "$LAST_OUTPUT_FILE")
 PROJECT_DIR=$(printf '%q' "$PROJECT_DIR")
 NOTIFY_CHATGPT=$(printf '%q' "$NOTIFY_CHATGPT")
+SESSION_ID=$(printf '%q' "$session_id")
+SNAPSHOT_FILE=\$(mktemp -t codex-output.XXXXXXXXXX.md) || exit 1
+
+trap 'rm -f "\$SNAPSHOT_FILE"' EXIT
 
 if [ ! -s "\$COMMAND_FILE" ] || ! grep -q '[^[:space:]]' "\$COMMAND_FILE"; then
   echo "Ignored empty command file."
@@ -267,6 +317,11 @@ if [ ! -s "\$COMMAND_FILE" ] || ! grep -q '[^[:space:]]' "\$COMMAND_FILE"; then
 fi
 
 {
+  echo "session_id: \$SESSION_ID"
+  echo "source: watcher-new-terminal"
+  echo "command:"
+  cat "\$COMMAND_FILE"
+  echo
   echo "Latest command output snapshot."
   echo
   echo "Started: \$(date)"
@@ -282,38 +337,30 @@ fi
   echo "Exit code: \$status"
   echo "Finished: \$(date)"
   exit "\$status"
-} 2>&1 | tee -a "\$LAST_OUTPUT_FILE" | tee -a "\$CONVERSATION_FILE" | tee -a "\$LOG_FILE"
+} 2>&1 | tee "\$SNAPSHOT_FILE" | tee -a "\$CONVERSATION_FILE" | tee -a "\$LOG_FILE"
 status=\${PIPESTATUS[0]}
 
-if [ "\$NOTIFY_CHATGPT" = "true" ] && command -v pbcopy >/dev/null 2>&1; then
-  printf '%s\n' "Done executing. Check .codex-inbox/last-output.md now." | pbcopy
-  osascript <<'EOD' 2>/dev/null || true
-tell application "ChatGPT" to activate
-delay 0.4
-tell application "System Events"
-  keystroke "v" using {command down}
-  delay 0.2
-  key code 36
-end tell
-EOD
-  osascript -e "display notification \"Command finished. ChatGPT was notified.\" with title \"Codex Daemon\"" 2>/dev/null || true
-fi
+mv -f "\$SNAPSHOT_FILE" "\$LAST_OUTPUT_FILE"
 
 exit "\$status"
 EOF
 
   chmod +x "$tmp_runner"
 
-  osascript - "$tmp_runner" <<'EOD' 2>/dev/null || true
+  osascript - "$tmp_runner" "$session_id" <<'EOD' 2>/dev/null || true
 on run argv
   set theScript to item 1 of argv
+  set theSessionId to item 2 of argv
   tell application "Terminal"
     activate
     if (count of windows) is 0 then
-      do script "bash " & quoted form of theScript
+      set spawnedTab to do script "bash " & quoted form of theScript
     else
-      do script "bash " & quoted form of theScript in front window
+      set spawnedTab to do script "bash " & quoted form of theScript in front window
     end if
+    try
+      set custom title of spawnedTab to "codex-spawn " & theSessionId
+    end try
   end tell
 end run
 EOD
@@ -429,7 +476,7 @@ echo ""
 
 if command -v fswatch >/dev/null 2>&1; then
   echo "Using fswatch."
-  fswatch -0 "$CHAT_FILE" "$COMMANDS_FILE" | while IFS= read -r -d '' changed_path; do
+  fswatch -0 "$CHAT_FILE" "$COMMANDS_FILE" "$LAST_OUTPUT_FILE" | while IFS= read -r -d '' changed_path; do
     if [ "$changed_path" = "$CHAT_FILE" ] && [ "$WATCH_CHAT_ON_SAVE" = "true" ] && [ -s "$CHAT_FILE" ]; then
       if wait_for_file_stable "$CHAT_FILE" 0.7 5; then
         CHAT_PROMPT="$(cat "$CHAT_FILE")"
@@ -447,11 +494,19 @@ if command -v fswatch >/dev/null 2>&1; then
         process_commands_file "$COMMAND_BLOCK"
       fi
     fi
+
+    if [ "$changed_path" = "$LAST_OUTPUT_FILE" ] && [ -s "$LAST_OUTPUT_FILE" ]; then
+      if wait_for_file_stable "$LAST_OUTPUT_FILE" 0.2 5; then
+        LAST_OUTPUT_BLOCK="$(cat "$LAST_OUTPUT_FILE")"
+        process_last_output_file "$LAST_OUTPUT_BLOCK"
+      fi
+    fi
   done
 else
   echo "fswatch not found; using 1s polling fallback."
   LAST_CHAT_HASH="$(read_state last_chat_hash)"
   LAST_COMMAND_HASH="$(read_state last_command_hash)"
+  LAST_OUTPUT_HASH="$(read_state last_output_hash)"
 
   while true; do
     if [ "$WATCH_CHAT_ON_SAVE" = "true" ] && [ -s "$CHAT_FILE" ]; then
@@ -472,6 +527,17 @@ else
         if [ "$COMMAND_HASH" != "$LAST_COMMAND_HASH" ]; then
           LAST_COMMAND_HASH="$COMMAND_HASH"
           process_commands_file "$COMMAND_BLOCK"
+        fi
+      fi
+    fi
+
+    if [ -s "$LAST_OUTPUT_FILE" ]; then
+      if wait_for_file_stable "$LAST_OUTPUT_FILE" 0.2 5; then
+        LAST_OUTPUT_BLOCK="$(cat "$LAST_OUTPUT_FILE")"
+        LAST_OUTPUT_BLOCK_HASH="$(hash_text "$LAST_OUTPUT_BLOCK")"
+        if [ "$LAST_OUTPUT_BLOCK_HASH" != "$LAST_OUTPUT_HASH" ]; then
+          LAST_OUTPUT_HASH="$LAST_OUTPUT_BLOCK_HASH"
+          process_last_output_file "$LAST_OUTPUT_BLOCK"
         fi
       fi
     fi

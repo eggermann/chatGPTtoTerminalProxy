@@ -125,8 +125,17 @@ That is the missing signal path:
 
 - terminal output is the source of truth
 - `last-output.md` is the handoff file
+- it is replaced only after the command finishes
+- `last-output.md` is also the trigger file for the ChatGPT ping
+- the header includes `session_id`, `source`, and `command`
 - ChatGPT should not guess
 - the done ping should say: `Check .codex-inbox/last-output.md now.`
+
+For a manual terminal, wrap the command:
+
+```bash
+./.codex-inbox/capture-output.sh "npm start"
+```
 
 ## 5. Improve the hello world step
 
