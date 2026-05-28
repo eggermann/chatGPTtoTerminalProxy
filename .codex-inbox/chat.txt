@@ -1,0 +1,4 @@
+Create a clean hello world project in `~/codex-projects/hello-world`.
+Make a plain `index.html`.
+No npm yet.
+Open the result in the browser.
