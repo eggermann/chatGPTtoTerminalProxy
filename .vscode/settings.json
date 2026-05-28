@@ -1,6 +1,6 @@
 {
   "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 100,
+  "files.autoSaveDelay": 200,
   "editor.formatOnSave": true,
   "editor.rulers": [100],
   "files.trimTrailingWhitespace": true,

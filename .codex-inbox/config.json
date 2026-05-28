@@ -3,5 +3,9 @@
   "approvalLevel": "standard",
   "defaultButton": "Run",
   "notifyChatGPT": true,
-  "runMode": "auto"
+  "runMode": "auto",
+  "activateWatchOnSave": {
+    "chat": true,
+    "commands": true
+  }
 }

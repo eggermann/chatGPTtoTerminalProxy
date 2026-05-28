@@ -1,5 +1,5 @@
 #!/bin/bash
-set -u
+set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
@@ -18,6 +18,8 @@ APPROVAL_LEVEL="standard"
 DIALOG_DEFAULT_BUTTON="Run"
 NOTIFY_CHATGPT="true"
 RUN_MODE="auto"
+WATCH_CHAT_ON_SAVE="true"
+WATCH_COMMANDS_ON_SAVE="true"
 
 if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_FILE" ]; then
   while IFS='=' read -r key value; do
@@ -27,6 +29,8 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_FILE" ]; then
       defaultButton) DIALOG_DEFAULT_BUTTON="$value" ;;
       notifyChatGPT) NOTIFY_CHATGPT="$value" ;;
       runMode) RUN_MODE="$value" ;;
+      activateWatchOnSaveChat) WATCH_CHAT_ON_SAVE="$value" ;;
+      activateWatchOnSaveCommands) WATCH_COMMANDS_ON_SAVE="$value" ;;
     esac
   done < <(
     python3 - "$CONFIG_FILE" <<'PY'
@@ -41,6 +45,15 @@ for key in ("workflow", "approvalLevel", "defaultButton", "notifyChatGPT", "runM
         if isinstance(value, bool):
             value = str(value).lower()
         print(f"{key}={value}")
+
+save_watch = data.get("activateWatchOnSave", {})
+if isinstance(save_watch, dict):
+    for key, env_key in (("chat", "activateWatchOnSaveChat"), ("commands", "activateWatchOnSaveCommands")):
+        if key in save_watch:
+            value = save_watch[key]
+            if isinstance(value, bool):
+                value = str(value).lower()
+            print(f"{env_key}={value}")
 PY
   )
 fi
@@ -117,12 +130,37 @@ hash_text() {
   if command -v shasum >/dev/null 2>&1; then
     printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
   else
-    printf '%s' "$1" | python3 - <<'PY'
+    python3 - "$1" <<'PY'
 import hashlib, sys
-data = sys.stdin.read().encode()
+data = sys.argv[1].encode()
 print(hashlib.sha256(data).hexdigest())
 PY
   fi
+}
+
+wait_for_file_stable() {
+  local file="$1"
+  local delay="${2:-0.7}"
+  local attempts="${3:-5}"
+  local previous_hash current_hash i
+
+  if [ ! -e "$file" ]; then
+    return 1
+  fi
+
+  previous_hash="$(hash_text "$(cat "$file" 2>/dev/null)")"
+  i=1
+  while [ "$i" -le "$attempts" ]; do
+    sleep "$delay"
+    current_hash="$(hash_text "$(cat "$file" 2>/dev/null)")"
+    if [ "$current_hash" = "$previous_hash" ]; then
+      return 0
+    fi
+    previous_hash="$current_hash"
+    i=$((i + 1))
+  done
+
+  return 1
 }
 
 ack_prompt_to_chatgpt() {
@@ -149,7 +187,7 @@ EOD
 
 notify_chatgpt_done() {
   if [ "$NOTIFY_CHATGPT" = "true" ] && command -v pbcopy >/dev/null 2>&1; then
-    printf '%s\n' "Done executing. Please read my terminal window now." | pbcopy
+    printf '%s\n' "Done executing. Check .codex-inbox/last-output.md now." | pbcopy
 
     osascript <<'EOD' 2>/dev/null || true
 tell application "ChatGPT" to activate
@@ -198,40 +236,83 @@ run_commands() {
 
 run_commands_in_new_terminal() {
   local command_block="$1"
-  local shell_command
+  local tmp_command tmp_runner
 
-  shell_command="$(python3 - "$PROJECT_DIR" "$LOG_FILE" "$CONVERSATION_FILE" "$LAST_OUTPUT_FILE" "$command_block" <<'PY'
-import shlex, sys
+  tmp_command="$(mktemp -t codex-command.XXXXXXXXXX.sh)" || {
+    echo "Could not create temporary command file." | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE"
+    return 1
+  }
 
-project_dir, log_file, conversation_file, last_output_file, command_block = sys.argv[1:6]
-lines = [
-    f"cd {shlex.quote(project_dir)} || exit 1",
-    "{",
-    '  echo ""',
-    '  echo "[$(date)] Running commands:"',
-    f"  printf '%s\\n' {shlex.quote(command_block)}",
-    '  echo ""',
-    f"  bash -lc {shlex.quote(command_block)}",
-    '  EXIT_CODE=$?',
-    '  echo ""',
-    '  echo "Exit code: $EXIT_CODE"',
-    '  echo "[$(date)] Done"',
-    '  echo ""',
-    f"}} 2>&1 | tee -a {shlex.quote(log_file)} | tee -a {shlex.quote(conversation_file)} | tee {shlex.quote(last_output_file)}",
-]
-print("\n".join(lines))
-PY
-)"
+  tmp_runner="$(mktemp -t codex-runner.XXXXXXXXXX.sh)" || {
+    echo "Could not create temporary runner file." | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE"
+    rm -f "$tmp_command"
+    return 1
+  }
 
-  osascript - "$shell_command" <<'EOD' 2>/dev/null || true
+  printf '%s\n' "$command_block" > "$tmp_command"
+
+  cat > "$tmp_runner" <<EOF
+#!/usr/bin/env bash
+set -uo pipefail
+COMMAND_FILE=$(printf '%q' "$tmp_command")
+LOG_FILE=$(printf '%q' "$LOG_FILE")
+CONVERSATION_FILE=$(printf '%q' "$CONVERSATION_FILE")
+LAST_OUTPUT_FILE=$(printf '%q' "$LAST_OUTPUT_FILE")
+PROJECT_DIR=$(printf '%q' "$PROJECT_DIR")
+NOTIFY_CHATGPT=$(printf '%q' "$NOTIFY_CHATGPT")
+
+if [ ! -s "\$COMMAND_FILE" ] || ! grep -q '[^[:space:]]' "\$COMMAND_FILE"; then
+  echo "Ignored empty command file."
+  exit 0
+fi
+
+{
+  echo "Latest command output snapshot."
+  echo
+  echo "Started: \$(date)"
+  echo
+  echo "## Commands"
+  cat "\$COMMAND_FILE"
+  echo
+  echo "## Output"
+  cd "\$PROJECT_DIR" || exit 1
+  bash "\$COMMAND_FILE"
+  status=\$?
+  echo
+  echo "Exit code: \$status"
+  echo "Finished: \$(date)"
+  exit "\$status"
+} 2>&1 | tee -a "\$LAST_OUTPUT_FILE" | tee -a "\$CONVERSATION_FILE" | tee -a "\$LOG_FILE"
+status=\${PIPESTATUS[0]}
+
+if [ "\$NOTIFY_CHATGPT" = "true" ] && command -v pbcopy >/dev/null 2>&1; then
+  printf '%s\n' "Done executing. Check .codex-inbox/last-output.md now." | pbcopy
+  osascript <<'EOD' 2>/dev/null || true
+tell application "ChatGPT" to activate
+delay 0.4
+tell application "System Events"
+  keystroke "v" using {command down}
+  delay 0.2
+  key code 36
+end tell
+EOD
+  osascript -e "display notification \"Command finished. ChatGPT was notified.\" with title \"Codex Daemon\"" 2>/dev/null || true
+fi
+
+exit "\$status"
+EOF
+
+  chmod +x "$tmp_runner"
+
+  osascript - "$tmp_runner" <<'EOD' 2>/dev/null || true
 on run argv
   set theScript to item 1 of argv
   tell application "Terminal"
     activate
     if (count of windows) is 0 then
-      do script theScript
+      do script "bash " & quoted form of theScript
     else
-      do script theScript in front window
+      do script "bash " & quoted form of theScript in front window
     end if
   end tell
 end run
@@ -239,7 +320,6 @@ EOD
 
   append_conversation "status" "Command dispatched to a new Terminal session."
   echo "Command dispatched to a new Terminal session."
-  notify_chatgpt_done
 }
 
 should_run_in_new_terminal() {
@@ -285,6 +365,43 @@ dispatch_command() {
   esac
 }
 
+has_meaningful_command() {
+  local command_block="$1"
+
+  printf '%s' "$command_block" | grep -q '[^[:space:]]'
+}
+
+process_commands_file() {
+  local command_block="$1"
+  local command_hash last_command_hash
+
+  command_hash="$(hash_text "$command_block")"
+  last_command_hash="$(read_state last_command_hash)"
+
+  if [ "$command_hash" = "$last_command_hash" ]; then
+    return 0
+  fi
+
+  if ! has_meaningful_command "$command_block"; then
+    echo "Ignored empty commands.txt"
+    append_conversation "status" "Ignored empty commands.txt"
+    write_state "last_command_hash" "$command_hash"
+    return 0
+  fi
+
+  append_conversation "commands" "$command_block"
+
+  USER_CHOICE="$(ask_for_approval "$command_block" 2>/dev/null || true)"
+  if [[ "$USER_CHOICE" == *"button returned:Run"* ]]; then
+    dispatch_command "$command_block"
+  else
+    echo "Cancelled by user."
+    append_conversation "status" "User cancelled command execution."
+  fi
+
+  write_state "last_command_hash" "$command_hash"
+}
+
 ask_for_approval() {
   local command_block="$1"
 
@@ -302,6 +419,8 @@ echo "Chat-first daemon running."
 echo "Project: $PROJECT_DIR"
 echo "Workflow: $FLOW"
 echo "Run mode: $RUN_MODE"
+echo "Watch chat on save: $WATCH_CHAT_ON_SAVE"
+echo "Watch commands on save: $WATCH_COMMANDS_ON_SAVE"
 echo "Memory: $MEMORY_FILE"
 echo "Watching chat: $CHAT_FILE"
 echo "Watching commands: $COMMANDS_FILE"
@@ -310,53 +429,50 @@ echo ""
 
 if command -v fswatch >/dev/null 2>&1; then
   echo "Using fswatch."
-  fswatch -0 "$CHAT_FILE" "$COMMANDS_FILE" | while IFS= read -r -d '' _; do
-    if [ -s "$CHAT_FILE" ]; then
-      CHAT_PROMPT="$(cat "$CHAT_FILE")"
-      CHAT_HASH="$(hash_text "$CHAT_PROMPT")"
-      LAST_CHAT_HASH="$(read_state last_chat_hash)"
-      if [ "$CHAT_HASH" != "$LAST_CHAT_HASH" ]; then
-        process_chat_prompt "$CHAT_PROMPT"
+  fswatch -0 "$CHAT_FILE" "$COMMANDS_FILE" | while IFS= read -r -d '' changed_path; do
+    if [ "$changed_path" = "$CHAT_FILE" ] && [ "$WATCH_CHAT_ON_SAVE" = "true" ] && [ -s "$CHAT_FILE" ]; then
+      if wait_for_file_stable "$CHAT_FILE" 0.7 5; then
+        CHAT_PROMPT="$(cat "$CHAT_FILE")"
+        CHAT_HASH="$(hash_text "$CHAT_PROMPT")"
+        LAST_CHAT_HASH="$(read_state last_chat_hash)"
+        if [ "$CHAT_HASH" != "$LAST_CHAT_HASH" ]; then
+          process_chat_prompt "$CHAT_PROMPT"
+        fi
       fi
     fi
 
-    if [ -s "$COMMANDS_FILE" ]; then
-      COMMAND_BLOCK="$(cat "$COMMANDS_FILE")"
-      : > "$COMMANDS_FILE"
-      append_conversation "commands" "$COMMAND_BLOCK"
-
-      USER_CHOICE="$(ask_for_approval "$COMMAND_BLOCK" 2>/dev/null || true)"
-      if [[ "$USER_CHOICE" == *"button returned:Run"* ]]; then
-        dispatch_command "$COMMAND_BLOCK"
-      else
-        echo "Cancelled by user."
-        append_conversation "status" "User cancelled command execution."
+    if [ "$changed_path" = "$COMMANDS_FILE" ] && [ "$WATCH_COMMANDS_ON_SAVE" = "true" ]; then
+      if wait_for_file_stable "$COMMANDS_FILE" 0.2 5; then
+        COMMAND_BLOCK="$(cat "$COMMANDS_FILE")"
+        process_commands_file "$COMMAND_BLOCK"
       fi
     fi
   done
 else
   echo "fswatch not found; using 1s polling fallback."
+  LAST_CHAT_HASH="$(read_state last_chat_hash)"
+  LAST_COMMAND_HASH="$(read_state last_command_hash)"
+
   while true; do
-    if [ -s "$CHAT_FILE" ]; then
-      CHAT_PROMPT="$(cat "$CHAT_FILE")"
-      CHAT_HASH="$(hash_text "$CHAT_PROMPT")"
-      LAST_CHAT_HASH="$(read_state last_chat_hash)"
-      if [ "$CHAT_HASH" != "$LAST_CHAT_HASH" ]; then
-        process_chat_prompt "$CHAT_PROMPT"
+    if [ "$WATCH_CHAT_ON_SAVE" = "true" ] && [ -s "$CHAT_FILE" ]; then
+      if wait_for_file_stable "$CHAT_FILE" 0.7 5; then
+        CHAT_PROMPT="$(cat "$CHAT_FILE")"
+        CHAT_HASH="$(hash_text "$CHAT_PROMPT")"
+        if [ "$CHAT_HASH" != "$LAST_CHAT_HASH" ]; then
+          LAST_CHAT_HASH="$CHAT_HASH"
+          process_chat_prompt "$CHAT_PROMPT"
+        fi
       fi
     fi
 
-    if [ -s "$COMMANDS_FILE" ]; then
-      COMMAND_BLOCK="$(cat "$COMMANDS_FILE")"
-      : > "$COMMANDS_FILE"
-      append_conversation "commands" "$COMMAND_BLOCK"
-
-      USER_CHOICE="$(ask_for_approval "$COMMAND_BLOCK" 2>/dev/null || true)"
-      if [[ "$USER_CHOICE" == *"button returned:Run"* ]]; then
-        dispatch_command "$COMMAND_BLOCK"
-      else
-        echo "Cancelled by user."
-        append_conversation "status" "User cancelled command execution."
+    if [ "$WATCH_COMMANDS_ON_SAVE" = "true" ]; then
+      if wait_for_file_stable "$COMMANDS_FILE" 0.2 5; then
+        COMMAND_BLOCK="$(cat "$COMMANDS_FILE")"
+        COMMAND_HASH="$(hash_text "$COMMAND_BLOCK")"
+        if [ "$COMMAND_HASH" != "$LAST_COMMAND_HASH" ]; then
+          LAST_COMMAND_HASH="$COMMAND_HASH"
+          process_commands_file "$COMMAND_BLOCK"
+        fi
       fi
     fi
 
