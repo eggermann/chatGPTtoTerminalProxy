@@ -15,7 +15,7 @@ Chat-first file bridge for ChatGPT/Codex on macOS.
 
 - ChatGPT app
 - VS Code with this repo open
-- Terminal running `./.codex-inbox/watch-chat-first.sh`
+- Terminal running `./bin/watch-chat-first.sh`
 - Optional: Cursor instead of VS Code
 
 ### 1b. Enable Work with Apps
@@ -35,8 +35,8 @@ See [`docs/tutorial.md`](docs/tutorial.md) for:
 ### 2. Start the watcher
 
 ```bash
-chmod +x .codex-inbox/watch-chat-first.sh
-./.codex-inbox/watch-chat-first.sh
+chmod +x ./bin/watch-chat-first.sh ./bin/capture-output.sh ./parasit.sh ./bin/chatgpt-parasit.sh
+./parasit.sh
 ```
 
 The default config is in `.codex-inbox/config.json`.
@@ -103,11 +103,27 @@ The watcher will ask for approval, then run them in this project folder.
 - `.codex-inbox/commands.txt` - final shell commands, kept visible after run
 - `.codex-inbox/log.txt` - execution log
 - `.codex-inbox/config.json` - project workflow settings
-- `.codex-inbox/watch-chat-first.sh` - chat-first watcher
-- `.codex-inbox/capture-output.sh` - helper for manual terminals
+- `.codex-inbox/watch-chat-first.sh` - legacy path; use `./bin/watch-chat-first.sh`
+- `.codex-inbox/capture-output.sh` - legacy path; use `./bin/capture-output.sh`
 - `.vscode/settings.json` - editor defaults for this workflow
 
 Legacy command bridge files were removed from this branch for clarity.
+
+### 7. Conversation base
+
+- `bin/conversation-base.md` is the base template
+- `./parasit.sh fresh <name>` archives the current inbox into `.codex-inbox/.archive/<name>/`
+- `chat.txt` is seeded from `bin/chat-template.md`
+- new sessions copy the base into `.codex-inbox/conversation-base.md`
+- `fresh` starts `./bin/watch-chat-first.sh` automatically
+- keep the base short and stable
+
+### 8. Parasit in Deutsch
+
+Siehe:
+
+- [`docs/parasit.de.md`](docs/parasit.de.md) für die Kurz-README
+- [`docs/parasit-manual.de.md`](docs/parasit-manual.de.md) für das ausführliche Manual
 
 ## Good Project Defaults
 
@@ -120,7 +136,7 @@ Legacy command bridge files were removed from this branch for clarity.
 - `last-output.md` is the output trigger; watcher pings ChatGPT after it changes
 - the file is replaced only after the command finishes
 - the header includes `session_id`, `source`, and `command`
-- For manual terminals, use `.codex-inbox/capture-output.sh "<command>"`
+- For manual terminals, use `./bin/capture-output.sh "<command>"`
 - Keep approvals human-visible
 - Check `git status` before approving bigger commands
 

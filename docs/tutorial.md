@@ -29,13 +29,15 @@ Keep `memory.md` small:
 - branch name
 - one-line purpose
 
+If you want a fresh session base, copy the template from `bin/conversation-base.md` into `.codex-inbox/conversation-base.md`.
+
 ## 2. What to turn on
 
 Open and keep open:
 
 - ChatGPT app
 - VS Code or Cursor with this repo open
-- Terminal running `./.codex-inbox/watch-chat-first.sh`
+- Terminal running `./parasit.sh`
 
 Also turn on:
 
@@ -134,7 +136,7 @@ That is the missing signal path:
 For a manual terminal, wrap the command:
 
 ```bash
-./.codex-inbox/capture-output.sh "npm start"
+./bin/capture-output.sh "npm start"
 ```
 
 ## 5. Improve the hello world step
