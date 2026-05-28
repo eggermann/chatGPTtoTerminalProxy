@@ -1,0 +1,57 @@
+- generic [ref=e2]:
+  - main [ref=e4]:
+    - alert [ref=e6]:
+      - img [ref=e8]
+      - alert [ref=e10]:
+        - generic [ref=e13]: Melde dich an, um fortzufahren.
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - img "GitLab Enterprise Edition" [ref=e16]
+        - heading "GitLab Enterprise Edition" [level=1] [ref=e17]
+      - generic [ref=e18]:
+        - generic [ref=e20]:
+          - generic [ref=e21]:
+            - generic [ref=e22]:
+              - group [ref=e23]:
+                - generic [ref=e24]: Benutzername oder primäre E-Mail-Adresse
+                - textbox "Benutzername oder primäre E-Mail-Adresse" [active] [ref=e26]
+              - group [ref=e27]:
+                - generic [ref=e28]: Passwort
+                - generic [ref=e29]:
+                  - generic [ref=e30]:
+                    - textbox "Passwort" [ref=e31]
+                    - button "Passwort anzeigen" [ref=e32] [cursor=pointer]:
+                      - img [ref=e33]
+                  - link "Hast du dein Passwort vergessen?" [ref=e37] [cursor=pointer]:
+                    - /url: /users/password/new
+            - generic [ref=e39]:
+              - checkbox "Login merken" [ref=e40]
+              - generic [ref=e41] [cursor=pointer]: Login merken
+            - button "Anmelden" [ref=e42] [cursor=pointer]:
+              - generic [ref=e43]: Anmelden
+          - button "Passkey" [ref=e45] [cursor=pointer]:
+            - img [ref=e46]
+            - generic [ref=e48]: Passkey
+        - generic [ref=e49]:
+          - separator [ref=e50]
+          - text: oder melde dich an mit
+          - separator [ref=e51]
+        - generic [ref=e52]:
+          - button "SAML" [ref=e54] [cursor=pointer]:
+            - generic [ref=e55]: SAML
+          - generic [ref=e56]:
+            - checkbox "Login merken" [ref=e57]
+            - generic [ref=e58] [cursor=pointer]: Login merken
+  - generic [ref=e59]:
+    - separator [ref=e60]
+    - generic [ref=e61]:
+      - generic [ref=e62]:
+        - link "Über GitLab" [ref=e63] [cursor=pointer]:
+          - /url: https://about.gitlab.com
+        - link "GitLab-Community-Forum" [ref=e64] [cursor=pointer]:
+          - /url: https://forum.gitlab.com
+      - combobox "Deutsch" [ref=e66] [cursor=pointer]:
+        - img [ref=e67]
+        - generic [ref=e69]:
+          - generic [ref=e70]: Deutsch
+          - img [ref=e71]

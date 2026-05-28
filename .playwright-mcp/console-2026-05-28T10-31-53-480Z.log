@@ -1,0 +1,7 @@
+[    2536ms] [LOG] %cWillkommen bei GitLab!%c
+
+Braucht diese Seite Korrekturen oder Verbesserungen? Öffne ein Ticket oder trage einen Merge Request bei, um GitLab besser zu machen. Bei GitLab kann sich jeder einbringen!
+
+🤝 Zu GitLab beitragen: https://about.gitlab.com/community/contribute/
+🔎 Ein neues GitLab-Ticket erstellen: https://gitlab.com/gitlab-org/gitlab/-/issues/new
+ padding-top: 0.5em; font-size: 2em; padding-bottom: 0.5em; @ https://gitlab.hattec.de/assets/webpack/hello.b7f494db.chunk.js:0
