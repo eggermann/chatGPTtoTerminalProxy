@@ -2,7 +2,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+PROJECT_DIR="$(cd -- "$PROJECT_DIR" && pwd)"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
 INBOX_DIR="$PROJECT_DIR/.codex-inbox"
 CHAT_FILE="$INBOX_DIR/chat.txt"
 COMMANDS_FILE="$INBOX_DIR/commands.txt"
@@ -77,30 +79,6 @@ watcher_is_running() {
   kill -0 "$pid" >/dev/null 2>&1
 }
 
-kill_other_watchers() {
-  local pid
-
-  if command -v pgrep >/dev/null 2>&1; then
-    while IFS= read -r pid; do
-      if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
-        kill "$pid" >/dev/null 2>&1 || true
-      fi
-    done <<EOF
-$(pgrep -f "$SCRIPT_DIR/watch-chat-first.sh" 2>/dev/null || true)
-EOF
-
-    sleep 0.3
-
-    while IFS= read -r pid; do
-      if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
-        kill -9 "$pid" >/dev/null 2>&1 || true
-      fi
-    done <<EOF
-$(pgrep -f "$SCRIPT_DIR/watch-chat-first.sh" 2>/dev/null || true)
-EOF
-  fi
-}
-
 stop_running_watcher() {
   local pid
 
@@ -138,8 +116,6 @@ if watcher_is_running; then
   stop_running_watcher
 fi
 
-kill_other_watchers
-
 echo "$$" > "$WATCH_PID_FILE"
 trap cleanup_watch_pid EXIT INT TERM
 
@@ -148,7 +124,7 @@ if [ ! -s "$MEMORY_FILE" ]; then
   {
     echo "# Memory"
     echo ""
-    echo "- title: chatGPTtoTerminalProxy"
+    echo "- title: $PROJECT_NAME"
     echo "- project_path: $PROJECT_DIR"
     echo "- workflow: chat-first"
     echo "- purpose: move thought into terminal without losing the thread"

@@ -2,7 +2,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+PROJECT_DIR="$(cd -- "$PROJECT_DIR" && pwd)"
 LAST_OUTPUT_FILE="$PROJECT_DIR/.codex-inbox/last-output.md"
 CONVERSATION_FILE="$PROJECT_DIR/.codex-inbox/conversation.md"
 LOG_FILE="$PROJECT_DIR/.codex-inbox/log.txt"
@@ -19,6 +20,9 @@ if [ "$#" -eq 0 ]; then
   echo "Usage: $0 <shell command>" >&2
   exit 1
 fi
+
+mkdir -p "$PROJECT_DIR/.codex-inbox"
+touch "$LAST_OUTPUT_FILE" "$CONVERSATION_FILE" "$LOG_FILE"
 
 cd "$PROJECT_DIR" || exit 1
 

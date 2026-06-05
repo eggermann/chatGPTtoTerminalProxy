@@ -52,6 +52,19 @@ Neue Session:
 ./parasit.sh fresh hello-world
 ```
 
+Ohne Namen:
+
+```bash
+cd /Users/eggermann/Desktop/speedProjects/modal-hacka
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh
+```
+
+Dann gilt:
+
+- Projektpfad ist der aktuelle Ordner
+- `.codex-inbox/` liegt in diesem Ordner
+- als Session-Name wird standardmäßig `modal-hacka` verwendet
+
 Vorhandene Session öffnen:
 
 ```bash

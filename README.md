@@ -115,10 +115,23 @@ Legacy command bridge files were removed from this branch for clarity.
 ### 7. Conversation base
 
 - `./parasit.sh fresh <name>` archives the current inbox into `.codex-inbox/.archive/<name>/`
+- `./parasit.sh fresh` uses the current folder name as the default session name
 - `chat.txt` is seeded from `bin/chat-template.md`
 - `fresh` starts `./bin/watch-chat-first.sh` automatically
 - session branches live in the inner `.codex-inbox` repo
 - keep the base short and stable
+
+### 7a. Use it in any project folder
+
+```bash
+cd /Users/eggermann/Desktop/speedProjects/modal-hacka
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh
+```
+
+- the project path resolves from the current working directory
+- `.codex-inbox/` is created inside that project folder
+- `fresh` uses `modal-hacka` as the default session branch slug
+- watcher state and output files stay attached to that project path
 
 ### 8. Parasit in Deutsch
 

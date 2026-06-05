@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+TOOL_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+PROJECT_DIR="$(cd -- "$PROJECT_DIR" && pwd)"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
 INBOX_DIR="$PROJECT_DIR/.codex-inbox"
 INNER_GIT_DIR="$INBOX_DIR"
 STATE_FILE="$INBOX_DIR/session.json"
@@ -10,7 +13,7 @@ CHAT_TEMPLATE="$SCRIPT_DIR/chat-template.md"
 SESSION_PREFIX="${SESSION_PREFIX:-codex/session}"
 DEFAULT_BASE_BRANCH="${DEFAULT_BASE_BRANCH:-main}"
 ARCHIVE_DIR="$INBOX_DIR/.archive"
-WATCHER_SCRIPT="$PROJECT_DIR/bin/watch-chat-first.sh"
+WATCHER_SCRIPT="$TOOL_ROOT/bin/watch-chat-first.sh"
 WATCH_PID_FILE="$INBOX_DIR/watch.pid"
 
 die() {
@@ -22,8 +25,8 @@ inbox_git() {
   git -C "$INNER_GIT_DIR" "$@"
 }
 
-require_repo() {
-  git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not a git repo: $PROJECT_DIR"
+require_project_dir() {
+  [ -d "$PROJECT_DIR" ] || die "Project directory not found: $PROJECT_DIR"
 }
 
 seed_git_identity() {
@@ -65,7 +68,7 @@ start_watcher() {
   fi
 
   if [ -x "$WATCHER_SCRIPT" ]; then
-    nohup "$WATCHER_SCRIPT" >/dev/null 2>&1 &
+    PROJECT_DIR="$PROJECT_DIR" nohup "$WATCHER_SCRIPT" >/dev/null 2>&1 &
     echo $! > "$WATCH_PID_FILE"
   fi
 }
@@ -160,7 +163,7 @@ EOF
   cat > "$INBOX_DIR/memory.md" <<EOF
 # Project Memory
 
-- title: chatGPTtoTerminalProxy
+- title: $PROJECT_NAME
 - project_path: $PROJECT_DIR
 - workflow: chat-first
 - purpose: move thought into terminal without losing the thread
@@ -242,7 +245,7 @@ new_session() {
   local session_name branch base
 
   base="$(base_branch)"
-  session_name="$(slugify "${raw_name:-$(date +%Y%m%d-%H%M%S)}")"
+  session_name="$(slugify "${raw_name:-$PROJECT_NAME}")"
   [ -n "$session_name" ] || session_name="$(date +%Y%m%d-%H%M%S)"
   branch="$SESSION_PREFIX/$session_name"
 
@@ -305,7 +308,11 @@ list_sessions() {
 
 status() {
   echo "Project: $PROJECT_DIR"
-  echo "Outer branch: $(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)"
+  if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Outer branch: $(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)"
+  else
+    echo "Outer branch: none (project is not a git repo)"
+  fi
   echo "Inner branch: $(current_branch)"
   echo "Base branch: $(base_branch)"
   echo "Inner repo: $INNER_GIT_DIR"
@@ -315,7 +322,11 @@ status() {
   list_sessions || true
   echo
   echo "Git status:"
-  git -C "$PROJECT_DIR" status --short
+  if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$PROJECT_DIR" status --short
+  else
+    echo "(not a git repo)"
+  fi
 }
 
 usage() {
@@ -330,7 +341,7 @@ EOF
 }
 
 main() {
-  require_repo
+  require_project_dir
   ensure_inbox
   ensure_inbox_repo
 

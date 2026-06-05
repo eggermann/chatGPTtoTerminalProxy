@@ -6,6 +6,7 @@
 
 - `./parasit.sh` startet nur den Watcher
 - `./parasit.sh fresh <name>` erstellt eine neue Session
+- `./parasit.sh fresh` nimmt den aktuellen Ordnernamen als Session-Namen
 - `./parasit.sh open <branch>` öffnet eine bestehende Session
 - eine Session ist ein Git-Branch im inneren `.codex-inbox`-Repo mit Prefix `codex/session/`
 - `autocommit` steuert den Hinweistext und den Auto-Commit bei erfolgreichem Output
@@ -23,6 +24,16 @@
 5. `memory.md` für den neuen Branch schreiben
 6. `session.json` und andere Laufzeitdateien neu anlegen
 7. `./bin/watch-chat-first.sh` automatisch starten
+
+Wenn kein Name übergeben wird, wird der aktuelle Ordnername verwendet. In
+
+```bash
+cd /Users/eggermann/Desktop/speedProjects/modal-hacka
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh
+```
+
+entsteht also standardmäßig die Session `codex/session/modal-hacka`, und
+`.codex-inbox/` wird unter `modal-hacka/` aufgelöst.
 
 ## Befehle
 
