@@ -4,22 +4,70 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
 INBOX_DIR="$PROJECT_DIR/.codex-inbox"
+INNER_GIT_DIR="$INBOX_DIR"
 STATE_FILE="$INBOX_DIR/session.json"
-BASE_TEMPLATE="$SCRIPT_DIR/conversation-base.md"
 CHAT_TEMPLATE="$SCRIPT_DIR/chat-template.md"
-SESSION_BASE_FILE="$INBOX_DIR/conversation-base.md"
 SESSION_PREFIX="${SESSION_PREFIX:-codex/session}"
 DEFAULT_BASE_BRANCH="${DEFAULT_BASE_BRANCH:-main}"
 ARCHIVE_DIR="$INBOX_DIR/.archive"
 WATCHER_SCRIPT="$PROJECT_DIR/bin/watch-chat-first.sh"
+WATCH_PID_FILE="$INBOX_DIR/watch.pid"
 
 die() {
   echo "$*" >&2
   exit 1
 }
 
+inbox_git() {
+  git -C "$INNER_GIT_DIR" "$@"
+}
+
 require_repo() {
   git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not a git repo: $PROJECT_DIR"
+}
+
+seed_git_identity() {
+  local name email
+
+  name="$(git -C "$PROJECT_DIR" config --get user.name 2>/dev/null || git config --global --get user.name 2>/dev/null || true)"
+  email="$(git -C "$PROJECT_DIR" config --get user.email 2>/dev/null || git config --global --get user.email 2>/dev/null || true)"
+
+  if [ -n "$name" ]; then
+    inbox_git config user.name "$name"
+  fi
+
+  if [ -n "$email" ]; then
+    inbox_git config user.email "$email"
+  fi
+}
+
+watcher_pid() {
+  [ -f "$WATCH_PID_FILE" ] || return 1
+  cat "$WATCH_PID_FILE" 2>/dev/null || return 1
+}
+
+watcher_is_running() {
+  local pid
+
+  pid="$(watcher_pid)" || return 1
+  case "$pid" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+start_watcher() {
+  if watcher_is_running; then
+    echo "Watcher already running: $(watcher_pid)"
+    return 0
+  fi
+
+  if [ -x "$WATCHER_SCRIPT" ]; then
+    nohup "$WATCHER_SCRIPT" >/dev/null 2>&1 &
+    echo $! > "$WATCH_PID_FILE"
+  fi
 }
 
 slugify() {
@@ -27,11 +75,11 @@ slugify() {
 }
 
 current_branch() {
-  git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true
+  inbox_git branch --show-current 2>/dev/null || true
 }
 
 branch_exists() {
-  git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$1"
+  inbox_git show-ref --verify --quiet "refs/heads/$1"
 }
 
 base_branch() {
@@ -47,9 +95,18 @@ ensure_inbox() {
   touch "$STATE_FILE"
 }
 
-copy_base_template() {
-  if [ -f "$BASE_TEMPLATE" ]; then
-    cp "$BASE_TEMPLATE" "$SESSION_BASE_FILE"
+ensure_inbox_repo() {
+  if [ ! -d "$INBOX_DIR/.git" ]; then
+    git -C "$INBOX_DIR" init -b main >/dev/null 2>&1 || git -C "$INBOX_DIR" init >/dev/null 2>&1
+  fi
+
+  seed_git_identity
+
+  if ! inbox_git rev-parse --verify HEAD >/dev/null 2>&1; then
+    if [ -n "$(inbox_git status --porcelain 2>/dev/null || true)" ]; then
+      inbox_git add -A
+      inbox_git commit -m "Initial inbox snapshot" >/dev/null 2>&1 || true
+    fi
   fi
 }
 
@@ -63,7 +120,6 @@ archive_current_inbox() {
     "$INBOX_DIR/chat.txt" \
     "$INBOX_DIR/commands.txt" \
     "$INBOX_DIR/conversation.md" \
-    "$INBOX_DIR/conversation-base.md" \
     "$INBOX_DIR/last-output.md" \
     "$INBOX_DIR/log.txt" \
     "$INBOX_DIR/memory.md" \
@@ -101,7 +157,6 @@ EOF
   : > "$INBOX_DIR/last-output.md"
   : > "$INBOX_DIR/log.txt"
   : > "$INBOX_DIR/watch-state.json"
-
   cat > "$INBOX_DIR/memory.md" <<EOF
 # Project Memory
 
@@ -178,7 +233,6 @@ PY
 sync_session_files() {
   local branch="$1"
   local base="$2"
-  copy_base_template
   write_state "$branch" "$base" "$(basename "$branch")"
   update_memory "$branch" "$base"
 }
@@ -196,18 +250,19 @@ new_session() {
     branch="$branch-$(date +%Y%m%d-%H%M%S)"
   fi
 
-  git -C "$PROJECT_DIR" switch -c "$branch" "$base"
+  if [ -n "$(inbox_git status --porcelain 2>/dev/null || true)" ]; then
+    inbox_git add -A
+    inbox_git commit -m "Snapshot before fresh: $session_name" >/dev/null 2>&1 || true
+  fi
+
+  inbox_git switch -c "$branch" "$base"
   archive_current_inbox "$session_name"
   sync_session_files "$branch" "$base"
   seed_fresh_inbox "$branch" "$base"
-  if [ -x "$WATCHER_SCRIPT" ]; then
-    nohup "$WATCHER_SCRIPT" >/dev/null 2>&1 &
-    echo $! > "$INBOX_DIR/watch.pid"
-  fi
+  start_watcher
 
   echo "Created session branch: $branch"
   echo "Base branch: $base"
-  echo "Session base copied to: $SESSION_BASE_FILE"
   echo "Archived previous inbox to: $ARCHIVE_DIR/$session_name"
   echo "Watcher started: $WATCHER_SCRIPT"
 }
@@ -221,7 +276,11 @@ switch_session() {
   fi
 
   branch_exists "$target" || die "Session branch not found: $target"
-  git -C "$PROJECT_DIR" switch "$target"
+  if [ -n "$(inbox_git status --porcelain 2>/dev/null || true)" ]; then
+    inbox_git add -A
+    inbox_git commit -m "Snapshot before switch: $target" >/dev/null 2>&1 || true
+  fi
+  inbox_git switch "$target"
   sync_session_files "$target" "$(base_branch)"
   echo "Switched to session branch: $target"
 }
@@ -236,20 +295,21 @@ delete_session() {
 
   branch_exists "$target" || die "Session branch not found: $target"
   [ "$(current_branch)" != "$target" ] || die "Refuse to delete current branch."
-  git -C "$PROJECT_DIR" branch -D "$target"
+  inbox_git branch -D "$target"
   echo "Deleted session branch: $target"
 }
 
 list_sessions() {
-  git -C "$PROJECT_DIR" for-each-ref --format='%(refname:short)' "refs/heads/$SESSION_PREFIX" | sort
+  inbox_git for-each-ref --format='%(refname:short)' "refs/heads/$SESSION_PREFIX" | sort
 }
 
 status() {
   echo "Project: $PROJECT_DIR"
-  echo "Current branch: $(current_branch)"
+  echo "Outer branch: $(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)"
+  echo "Inner branch: $(current_branch)"
   echo "Base branch: $(base_branch)"
+  echo "Inner repo: $INNER_GIT_DIR"
   echo "Session state: $STATE_FILE"
-  echo "Session base: $SESSION_BASE_FILE"
   echo
   echo "Sessions:"
   list_sessions || true
@@ -272,6 +332,7 @@ EOF
 main() {
   require_repo
   ensure_inbox
+  ensure_inbox_repo
 
   case "${1:-}" in
     fresh|new-session)

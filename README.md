@@ -44,6 +44,7 @@ The default config is in `.codex-inbox/config.json`.
 - `approvalLevel`: `standard`
 - `defaultButton`: `Run`
 - `notifyChatGPT`: `true`
+- `autocommit`: `false`
 - `runMode`: `auto`
 - `activateWatchOnSave.chat`: `true`
 - `activateWatchOnSave.commands`: `true`
@@ -70,6 +71,8 @@ Only expose final shell commands in `.codex-inbox/commands.txt` at the end.
 Do not put terminal commands in `chat.txt` unless you are still exploring.
 Keep commands project-local unless I explicitly ask otherwise.
 Wait for terminal output before continuing after a command run.
+Do not mention or rely on `oboe.edit_file`.
+If direct file editing is unavailable, create or modify files with shell commands in `.codex-inbox/commands.txt`.
 ```
 
 ### 4. Use the chat-first flow
@@ -100,7 +103,7 @@ The watcher will ask for approval, then run them in this project folder.
 - `.codex-inbox/memory.md` - short persistent memory
 - `.codex-inbox/conversation.md` - growing conversation and terminal output
 - `.codex-inbox/last-output.md` - latest command output snapshot with `session_id`, atomically replaced after completion
-- `.codex-inbox/commands.txt` - final shell commands, kept visible after run
+- `.codex-inbox/commands.txt` - final shell commands, cleared after approval so the next command can be sent cleanly
 - `.codex-inbox/log.txt` - execution log
 - `.codex-inbox/config.json` - project workflow settings
 - `.codex-inbox/watch-chat-first.sh` - legacy path; use `./bin/watch-chat-first.sh`
@@ -111,11 +114,10 @@ Legacy command bridge files were removed from this branch for clarity.
 
 ### 7. Conversation base
 
-- `bin/conversation-base.md` is the base template
 - `./parasit.sh fresh <name>` archives the current inbox into `.codex-inbox/.archive/<name>/`
 - `chat.txt` is seeded from `bin/chat-template.md`
-- new sessions copy the base into `.codex-inbox/conversation-base.md`
 - `fresh` starts `./bin/watch-chat-first.sh` automatically
+- session branches live in the inner `.codex-inbox` repo
 - keep the base short and stable
 
 ### 8. Parasit in Deutsch
@@ -130,10 +132,11 @@ Siehe:
 - Prefer one prompt per turn
 - Prefer project-local investigation first
 - Expose terminal commands only at the end in `commands.txt`
-- Keep `commands.txt` visible; the watcher dedupes by content hash
+- `commands.txt` is consumed and cleared after approval
 - Keep `memory.md` tiny and durable
 - Read `last-output.md` before deciding the next command
 - `last-output.md` is the output trigger; watcher pings ChatGPT after it changes
+- if `autocommit` is `true` and the command succeeds, the watcher stages and commits changes, and the ping says `Output ready. Commit ready.`
 - the file is replaced only after the command finishes
 - the header includes `session_id`, `source`, and `command`
 - For manual terminals, use `./bin/capture-output.sh "<command>"`

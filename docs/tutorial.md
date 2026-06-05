@@ -13,6 +13,8 @@ Use `.codex-inbox/last-output.md` before the next step.
 Only put final shell commands into `.codex-inbox/commands.txt`.
 Keep commands project-local unless I say otherwise.
 Wait for terminal output before continuing.
+Do not mention or rely on `oboe.edit_file`.
+If direct file editing is unavailable, create or modify files with shell commands in `.codex-inbox/commands.txt`.
 ```
 
 Then write the actual goal in `chat.txt`, for example:
@@ -29,7 +31,6 @@ Keep `memory.md` small:
 - branch name
 - one-line purpose
 
-If you want a fresh session base, copy the template from `bin/conversation-base.md` into `.codex-inbox/conversation-base.md`.
 
 ## 2. What to turn on
 

@@ -10,8 +10,7 @@
 - Session wechseln
 - Session löschen
 - Session als Git-Branch verwalten
-- frische Conversation-Basis pro Session kopieren
-- `chat.txt` aus `bin/chat-template.md` befüllen
+- - `chat.txt` aus `bin/chat-template.md` befüllen
 - alte Inbox pro Session archivieren
 - `fresh` startet automatisch `./bin/watch-chat-first.sh`
 
@@ -32,7 +31,6 @@ Das macht:
 
 - neuen Branch anlegen
 - auf den Branch wechseln
-- `bin/conversation-base.md` nach `.codex-inbox/conversation-base.md` kopieren
 - `session.json` schreiben
 - `memory.md` auf den neuen Branch aktualisieren
 
@@ -68,6 +66,4 @@ Status prüfen:
 
 ## Hinweis
 
-- `fresh` ist der Standardstart für einen neuen Session-Zweig
-- die alte `conversation-base.md` in `.codex-inbox` ist nur eine generierte Kopie
-- die echte Vorlage liegt in `bin/conversation-base.md`
+- `fresh` ist der Standardstart für einen neuen Session-Zweig im inneren Repo

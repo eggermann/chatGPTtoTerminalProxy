@@ -12,11 +12,13 @@ MEMORY_FILE="$INBOX_DIR/memory.md"
 LOG_FILE="$INBOX_DIR/log.txt"
 STATE_FILE="$INBOX_DIR/watch-state.json"
 CONFIG_FILE="$INBOX_DIR/config.json"
+WATCH_PID_FILE="$INBOX_DIR/watch.pid"
 
 FLOW="chat-first"
 APPROVAL_LEVEL="standard"
 DIALOG_DEFAULT_BUTTON="Run"
 NOTIFY_CHATGPT="true"
+AUTOCOMMIT="false"
 RUN_MODE="auto"
 WATCH_CHAT_ON_SAVE="true"
 WATCH_COMMANDS_ON_SAVE="true"
@@ -28,6 +30,7 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$CONFIG_FILE" ]; then
       approvalLevel) APPROVAL_LEVEL="$value" ;;
       defaultButton) DIALOG_DEFAULT_BUTTON="$value" ;;
       notifyChatGPT) NOTIFY_CHATGPT="$value" ;;
+      autocommit) AUTOCOMMIT="$value" ;;
       runMode) RUN_MODE="$value" ;;
       activateWatchOnSaveChat) WATCH_CHAT_ON_SAVE="$value" ;;
       activateWatchOnSaveCommands) WATCH_COMMANDS_ON_SAVE="$value" ;;
@@ -39,7 +42,7 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 data = json.loads(path.read_text())
-for key in ("workflow", "approvalLevel", "defaultButton", "notifyChatGPT", "runMode"):
+for key in ("workflow", "approvalLevel", "defaultButton", "notifyChatGPT", "autocommit", "runMode"):
     if key in data:
         value = data[key]
         if isinstance(value, bool):
@@ -61,7 +64,87 @@ fi
 mkdir -p "$INBOX_DIR"
 touch "$CHAT_FILE" "$COMMANDS_FILE" "$CONVERSATION_FILE" "$LAST_OUTPUT_FILE" "$MEMORY_FILE" "$LOG_FILE" "$STATE_FILE"
 
+watcher_is_running() {
+  local pid
+
+  [ -f "$WATCH_PID_FILE" ] || return 1
+  pid="$(cat "$WATCH_PID_FILE" 2>/dev/null || true)"
+  case "$pid" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+kill_other_watchers() {
+  local pid
+
+  if command -v pgrep >/dev/null 2>&1; then
+    while IFS= read -r pid; do
+      if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
+        kill "$pid" >/dev/null 2>&1 || true
+      fi
+    done <<EOF
+$(pgrep -f "$SCRIPT_DIR/watch-chat-first.sh" 2>/dev/null || true)
+EOF
+
+    sleep 0.3
+
+    while IFS= read -r pid; do
+      if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
+        kill -9 "$pid" >/dev/null 2>&1 || true
+      fi
+    done <<EOF
+$(pgrep -f "$SCRIPT_DIR/watch-chat-first.sh" 2>/dev/null || true)
+EOF
+  fi
+}
+
+stop_running_watcher() {
+  local pid
+
+  [ -f "$WATCH_PID_FILE" ] || return 0
+  pid="$(cat "$WATCH_PID_FILE" 2>/dev/null || true)"
+  case "$pid" in
+    ''|*[!0-9]*)
+      rm -f "$WATCH_PID_FILE"
+      return 0
+      ;;
+  esac
+
+  if kill -0 "$pid" >/dev/null 2>&1; then
+    echo "Stopping existing watcher: $pid"
+    kill "$pid" >/dev/null 2>&1 || true
+    for _ in 1 2 3 4 5; do
+      sleep 0.2
+      kill -0 "$pid" >/dev/null 2>&1 || break
+    done
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  rm -f "$WATCH_PID_FILE"
+}
+
+cleanup_watch_pid() {
+  if [ -f "$WATCH_PID_FILE" ] && [ "$(cat "$WATCH_PID_FILE" 2>/dev/null || true)" = "$$" ]; then
+    rm -f "$WATCH_PID_FILE"
+  fi
+}
+
+if watcher_is_running; then
+  stop_running_watcher
+fi
+
+kill_other_watchers
+
+echo "$$" > "$WATCH_PID_FILE"
+trap cleanup_watch_pid EXIT INT TERM
+
 if [ ! -s "$MEMORY_FILE" ]; then
+  INNER_BRANCH="$(git -C "$INBOX_DIR" branch --show-current 2>/dev/null || echo unknown)"
   {
     echo "# Memory"
     echo ""
@@ -69,7 +152,7 @@ if [ ! -s "$MEMORY_FILE" ]; then
     echo "- project_path: $PROJECT_DIR"
     echo "- workflow: chat-first"
     echo "- purpose: move thought into terminal without losing the thread"
-    echo "- branch: $(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || echo unknown)"
+    echo "- branch: $INNER_BRANCH"
   } > "$MEMORY_FILE"
 fi
 
@@ -195,7 +278,11 @@ EOD
 
 notify_chatgpt_done() {
   if [ "$NOTIFY_CHATGPT" = "true" ] && command -v pbcopy >/dev/null 2>&1; then
-    printf '%s\n' "Done executing. Check .codex-inbox/last-output.md now." | pbcopy
+    if [ "$AUTOCOMMIT" = "true" ]; then
+      printf '%s\n' "Output ready. Commit ready. Check .codex-inbox/last-output.md now." | pbcopy
+    else
+      printf '%s\n' "Done executing. Check .codex-inbox/last-output.md now." | pbcopy
+    fi
 
     osascript <<'EOD' 2>/dev/null || true
 tell application "ChatGPT" to activate
@@ -207,16 +294,48 @@ tell application "System Events"
 end tell
 EOD
 
-    osascript -e "display notification \"Command finished. ChatGPT was notified.\" with title \"Codex Daemon\"" 2>/dev/null || true
+    if [ "$AUTOCOMMIT" = "true" ]; then
+      osascript -e "display notification \"Output ready. Commit ready.\" with title \"Codex Daemon\"" 2>/dev/null || true
+    else
+      osascript -e "display notification \"Command finished. ChatGPT was notified.\" with title \"Codex Daemon\"" 2>/dev/null || true
+    fi
   fi
+}
+
+auto_commit_changes() {
+  local summary="$1"
+
+  if [ "$AUTOCOMMIT" != "true" ] || ! command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [ -z "$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null)" ]; then
+    echo "Autocommit skipped: no git changes."
+    return 0
+  fi
+
+  git -C "$PROJECT_DIR" add -A || return 1
+
+  if git -C "$PROJECT_DIR" diff --cached --quiet; then
+    echo "Autocommit skipped: nothing staged."
+    return 0
+  fi
+
+  git -C "$PROJECT_DIR" commit -m "Auto-commit: $summary" >/dev/null 2>&1 || {
+    echo "Autocommit failed."
+    return 1
+  }
+
+  echo "Autocommit created."
 }
 
 process_last_output_file() {
   local output_block="$1"
-  local output_hash last_output_hash
+  local output_hash last_output_hash last_notified_output_hash
 
   output_hash="$(hash_text "$output_block")"
   last_output_hash="$(read_state last_output_hash)"
+  last_notified_output_hash="$(read_state last_notified_output_hash)"
 
   if [ "$output_hash" = "$last_output_hash" ]; then
     return 0
@@ -229,7 +348,11 @@ process_last_output_file() {
   append_conversation "output" "$output_block"
   write_state "last_output_hash" "$output_hash"
   echo "Terminal output updated."
-  notify_chatgpt_done
+
+  if [ "$output_hash" != "$last_notified_output_hash" ]; then
+    write_state "last_notified_output_hash" "$output_hash"
+    notify_chatgpt_done
+  fi
 }
 
 process_chat_prompt() {
@@ -246,7 +369,7 @@ process_chat_prompt() {
 
 run_commands() {
   local command_block="$1"
-  local snapshot_file session_id
+  local snapshot_file session_id exit_code
 
   session_id="$(generate_session_id)"
 
@@ -267,14 +390,18 @@ run_commands() {
     echo "$command_block"
     echo ""
     bash -lc "$command_block"
-    EXIT_CODE=$?
+    command_exit=$?
     echo ""
-    echo "Exit code: $EXIT_CODE"
+    echo "Exit code: $command_exit"
     echo "[$(date)] Done"
     echo ""
   } 2>&1 | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE" | tee "$snapshot_file"
 
+  exit_code=${PIPESTATUS[0]}
   mv -f "$snapshot_file" "$LAST_OUTPUT_FILE"
+  if [ "$exit_code" -eq 0 ]; then
+    auto_commit_changes "$session_id"
+  fi
   trap - RETURN
 }
 
@@ -306,6 +433,7 @@ CONVERSATION_FILE=$(printf '%q' "$CONVERSATION_FILE")
 LAST_OUTPUT_FILE=$(printf '%q' "$LAST_OUTPUT_FILE")
 PROJECT_DIR=$(printf '%q' "$PROJECT_DIR")
 NOTIFY_CHATGPT=$(printf '%q' "$NOTIFY_CHATGPT")
+AUTOCOMMIT=$(printf '%q' "$AUTOCOMMIT")
 SESSION_ID=$(printf '%q' "$session_id")
 SNAPSHOT_FILE=\$(mktemp -t codex-output.XXXXXXXXXX.md) || exit 1
 
@@ -341,6 +469,17 @@ fi
 status=\${PIPESTATUS[0]}
 
 mv -f "\$SNAPSHOT_FILE" "\$LAST_OUTPUT_FILE"
+
+if [ "\$status" -eq 0 ]; then
+  if [ "\$AUTOCOMMIT" = "true" ]; then
+    if [ -n "\$(git -C \"\$PROJECT_DIR\" status --porcelain 2>/dev/null)" ]; then
+      git -C "\$PROJECT_DIR" add -A
+      if ! git -C "\$PROJECT_DIR" diff --cached --quiet; then
+        git -C "\$PROJECT_DIR" commit -m "Auto-commit: \$SESSION_ID" >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+fi
 
 exit "\$status"
 EOF
@@ -400,7 +539,6 @@ dispatch_command() {
         echo "Command started in background."
       } 2>&1 | tee -a "$LOG_FILE" | tee -a "$CONVERSATION_FILE"
       append_conversation "status" "Command started in background."
-      notify_chatgpt_done
       ;;
     *)
       if should_run_in_new_terminal "$command_block"; then
@@ -431,7 +569,6 @@ process_commands_file() {
 
   if ! has_meaningful_command "$command_block"; then
     echo "Ignored empty commands.txt"
-    append_conversation "status" "Ignored empty commands.txt"
     write_state "last_command_hash" "$command_hash"
     return 0
   fi
@@ -440,13 +577,14 @@ process_commands_file() {
 
   USER_CHOICE="$(ask_for_approval "$command_block" 2>/dev/null || true)"
   if [[ "$USER_CHOICE" == *"button returned:Run"* ]]; then
+    : > "$COMMANDS_FILE"
+    write_state "last_command_hash" "$(hash_text "")"
     dispatch_command "$command_block"
   else
     echo "Cancelled by user."
     append_conversation "status" "User cancelled command execution."
+    write_state "last_command_hash" "$command_hash"
   fi
-
-  write_state "last_command_hash" "$command_hash"
 }
 
 ask_for_approval() {
@@ -466,13 +604,22 @@ echo "Chat-first daemon running."
 echo "Project: $PROJECT_DIR"
 echo "Workflow: $FLOW"
 echo "Run mode: $RUN_MODE"
+echo "Autocommit alert: $AUTOCOMMIT"
 echo "Watch chat on save: $WATCH_CHAT_ON_SAVE"
 echo "Watch commands on save: $WATCH_COMMANDS_ON_SAVE"
 echo "Memory: $MEMORY_FILE"
 echo "Watching chat: $CHAT_FILE"
 echo "Watching commands: $COMMANDS_FILE"
 echo "Conversation: $CONVERSATION_FILE"
+echo "Watch PID: $WATCH_PID_FILE"
 echo ""
+
+LAST_CHAT_HASH="$(read_state last_chat_hash)"
+LAST_COMMAND_HASH="$(read_state last_command_hash)"
+LAST_OUTPUT_HASH="$(read_state last_output_hash)"
+CHAT_HASH=""
+COMMAND_HASH=""
+LAST_OUTPUT_BLOCK_HASH=""
 
 if command -v fswatch >/dev/null 2>&1; then
   echo "Using fswatch."
@@ -504,9 +651,6 @@ if command -v fswatch >/dev/null 2>&1; then
   done
 else
   echo "fswatch not found; using 1s polling fallback."
-  LAST_CHAT_HASH="$(read_state last_chat_hash)"
-  LAST_COMMAND_HASH="$(read_state last_command_hash)"
-  LAST_OUTPUT_HASH="$(read_state last_output_hash)"
 
   while true; do
     if [ "$WATCH_CHAT_ON_SAVE" = "true" ] && [ -s "$CHAT_FILE" ]; then
@@ -524,7 +668,7 @@ else
       if wait_for_file_stable "$COMMANDS_FILE" 0.2 5; then
         COMMAND_BLOCK="$(cat "$COMMANDS_FILE")"
         COMMAND_HASH="$(hash_text "$COMMAND_BLOCK")"
-        if [ "$COMMAND_HASH" != "$LAST_COMMAND_HASH" ]; then
+        if [ "${COMMAND_HASH:-}" != "${LAST_COMMAND_HASH:-}" ]; then
           LAST_COMMAND_HASH="$COMMAND_HASH"
           process_commands_file "$COMMAND_BLOCK"
         fi
@@ -535,7 +679,7 @@ else
       if wait_for_file_stable "$LAST_OUTPUT_FILE" 0.2 5; then
         LAST_OUTPUT_BLOCK="$(cat "$LAST_OUTPUT_FILE")"
         LAST_OUTPUT_BLOCK_HASH="$(hash_text "$LAST_OUTPUT_BLOCK")"
-        if [ "$LAST_OUTPUT_BLOCK_HASH" != "$LAST_OUTPUT_HASH" ]; then
+        if [ "${LAST_OUTPUT_BLOCK_HASH:-}" != "${LAST_OUTPUT_HASH:-}" ]; then
           LAST_OUTPUT_HASH="$LAST_OUTPUT_BLOCK_HASH"
           process_last_output_file "$LAST_OUTPUT_BLOCK"
         fi

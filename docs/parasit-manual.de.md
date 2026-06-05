@@ -7,8 +7,9 @@
 - `./parasit.sh` startet nur den Watcher
 - `./parasit.sh fresh <name>` erstellt eine neue Session
 - `./parasit.sh open <branch>` öffnet eine bestehende Session
-- eine Session ist ein Git-Branch mit Prefix `codex/session/`
-- `.codex-inbox` ist Datenbereich
+- eine Session ist ein Git-Branch im inneren `.codex-inbox`-Repo mit Prefix `codex/session/`
+- `autocommit` steuert den Hinweistext und den Auto-Commit bei erfolgreichem Output
+- `.codex-inbox` ist inneres Git-Repo und Datenbereich
 - `bin/` ist Tool-Bereich
 
 ## Was beim Fresh passiert
@@ -16,13 +17,12 @@
 `./parasit.sh fresh <name>` macht:
 
 1. alte Inbox-Dateien nach `.codex-inbox/.archive/<name>/` verschieben
-2. neuen Branch `codex/session/<name>` anlegen
+2. im inneren `.codex-inbox`-Repo neuen Branch `codex/session/<name>` anlegen
 3. auf den neuen Branch wechseln
 4. `chat.txt` aus `bin/chat-template.md` befüllen
-5. `conversation-base.md` aus `bin/conversation-base.md` kopieren
-6. `memory.md` für den neuen Branch schreiben
-7. `session.json` und andere Laufzeitdateien neu anlegen
-8. `./bin/watch-chat-first.sh` automatisch starten
+5. `memory.md` für den neuen Branch schreiben
+6. `session.json` und andere Laufzeitdateien neu anlegen
+7. `./bin/watch-chat-first.sh` automatisch starten
 
 ## Befehle
 
@@ -48,13 +48,11 @@
 - `bin/chatgpt-parasit.sh` - Session-CLI
 - `parasit.sh` - Root-Wrapper
 - `bin/chat-template.md` - Starttext für `chat.txt`
-- `bin/conversation-base.md` - Template für `conversation-base.md`
-- `.codex-inbox/conversation-base.md` - frische Kopie pro Session
 - `.codex-inbox/.archive/` - Archiv alter Sessions
 
 ## Regeln
 
-- Session-Namen werden zu Git-Branch-Namen normalisiert
+- Session-Namen werden zu Git-Branch-Namen im inneren Repo normalisiert
 - `fresh` startet immer mit frischer Inbox
 - alte Session-Dateien werden archiviert, nicht vermischt
 - `chat.txt` und `commands.txt` bleiben getrennt
@@ -72,4 +70,3 @@ Dann:
 - `chat.txt` prüfen
 - Watcher laufen lassen
 - in ChatGPT den nächsten Schritt ausführen
-
