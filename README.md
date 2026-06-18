@@ -2,11 +2,16 @@
 
 Chat-first file bridge for ChatGPT/Codex on macOS.
 
+> EXPERIMENTAL
+> Intended only for personal experimentation and stack-dependent tinkering.
+> Not production-ready.
+
 ## Starter Guide
 
 ### 1. Open the project
 
 - Run `./parasit.sh setup [path]`
+- Optional: install `parasit` globally with `./bin/install-parasit.sh`
 - Open the target project folder in VS Code if you want to edit files there
 - The bootstrap script creates the workspace settings and starts the watcher
 
@@ -41,6 +46,12 @@ chmod +x ./bin/watch-chat-first.sh ./bin/capture-output.sh ./bin/bootstrap.sh ./
 The bootstrap script prepares the workspace and starts the watcher in one step.
 
 If you already bootstrapped the project once, `./parasit.sh` starts only the watcher.
+
+After running the installer, you can call the CLI from anywhere as:
+
+```bash
+parasit setup /Users/eggermann/Desktop/speedProjects/modal-hacka
+```
 
 The default config is in `.codex-inbox/config.json`.
 - `workflow`: `chat-first`
