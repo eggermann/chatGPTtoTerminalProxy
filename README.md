@@ -8,50 +8,49 @@ Chat-first file bridge for ChatGPT/Codex on macOS.
 
 ## Starter Guide
 
-### 1. Open the project
+### 1. Install the CLI
 
-- Run `./parasit.sh setup [path]`
-- To use `parasit` from any shell on this machine, run `./bin/install-parasit.sh`
+```bash
+chmod +x ./bin/install-parasit.sh
+./bin/install-parasit.sh
+```
+
+This gives you a global `parasit` command for bootstrapping projects from any shell.
+
+### 2. Bootstrap a project
+
+```bash
+parasit setup /Users/eggermann/Desktop/speedProjects/modal-hacka
+```
+
+That creates the project-local `.codex-inbox/`, workspace settings, and watcher config automatically.
+
+### 3. Open the project
+
 - Open the target project folder in VS Code if you want to edit files there
-- The bootstrap script creates the workspace settings and starts the watcher
 
-### 1a. Keep these apps open
+### 3a. Keep these apps open
 
 - ChatGPT app
 - VS Code with the target project open
 - Terminal running `./bin/watch-chat-first.sh`
 - Optional: no editor changes are needed if you only want the terminal flow
 
-### 1b. Enable Work with Apps
+### 3b. Enable Work with Apps
 
 - In ChatGPT, open `Work with Apps`
 - Select VS Code
 - Keep `.codex-inbox/chat.txt` open in VS Code
 - Keep Terminal visible for watcher output
 
-### 1c. Tutorial
+### 3c. Tutorial
 
 See [`docs/tutorial.md`](docs/tutorial.md) for:
 - plain HTML hello world
 - npm project with `src` and bundler
 - the default project rule of thumb
 
-### 2. Bootstrap the project
-
-```bash
-chmod +x ./bin/watch-chat-first.sh ./bin/capture-output.sh ./bin/bootstrap.sh ./parasit.sh ./bin/chatgpt-parasit.sh
-./parasit.sh setup /Users/eggermann/Desktop/speedProjects/modal-hacka
-```
-
-The bootstrap script prepares the workspace and starts the watcher in one step.
-
 If you already bootstrapped the project once, `./parasit.sh` starts only the watcher.
-
-After running `./bin/install-parasit.sh`, you can call the CLI from anywhere as:
-
-```bash
-parasit setup /Users/eggermann/Desktop/speedProjects/modal-hacka
-```
 
 The default config is in `.codex-inbox/config.json`.
 - `workflow`: `chat-first`

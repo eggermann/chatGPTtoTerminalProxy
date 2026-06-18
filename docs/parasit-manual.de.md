@@ -4,9 +4,9 @@
 
 ## Kurzform
 
-- `./parasit.sh` startet nur den Watcher
-- `./parasit.sh setup [pfad]` richtet ein Projekt ein und startet den Watcher
 - `./bin/install-parasit.sh` installiert den globalen `parasit`-Launcher, damit du `parasit setup [pfad]` von überall nutzen kannst
+- `parasit setup [pfad]` richtet ein Projekt ein, erstellt `.codex-inbox/` und startet den Watcher
+- `./parasit.sh` startet nur den Watcher
 - `./parasit.sh fresh <name>` erstellt eine neue Session
 - `./parasit.sh fresh` nimmt den aktuellen Ordnernamen als Session-Namen
 - `./parasit.sh open <branch>` öffnet eine bestehende Session
@@ -52,7 +52,7 @@ seinen Elternordner aufgelöst.
 
 ```bash
 ./bin/install-parasit.sh
-./parasit.sh setup /Users/eggermann/Desktop/speedProjects/modal-hacka
+parasit setup /Users/eggermann/Desktop/speedProjects/modal-hacka
 ./parasit.sh fresh hello-world
 ./parasit.sh open codex/session/hello-world
 ./parasit.sh delete codex/session/hello-world
