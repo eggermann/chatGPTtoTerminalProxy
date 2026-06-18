@@ -5,6 +5,7 @@
 ## Kurzform
 
 - `./parasit.sh` startet nur den Watcher
+- `./parasit.sh setup [pfad]` richtet ein Projekt ein und startet den Watcher
 - `./parasit.sh fresh <name>` erstellt eine neue Session
 - `./parasit.sh fresh` nimmt den aktuellen Ordnernamen als Session-Namen
 - `./parasit.sh open <branch>` öffnet eine bestehende Session
@@ -49,7 +50,7 @@ seinen Elternordner aufgelöst.
 ## Befehle
 
 ```bash
-./parasit.sh
+./parasit.sh setup /Users/eggermann/Desktop/speedProjects/modal-hacka
 ./parasit.sh fresh hello-world
 ./parasit.sh open codex/session/hello-world
 ./parasit.sh delete codex/session/hello-world
@@ -68,6 +69,7 @@ seinen Elternordner aufgelöst.
 ## Dateien
 
 - `bin/chatgpt-parasit.sh` - Session-CLI
+- `bin/bootstrap.sh` - Projekt-Setup und Start
 - `parasit.sh` - Root-Wrapper
 - `bin/chat-template.md` - Starttext für `chat.txt`
 - `.codex-inbox/.archive/` - Archiv alter Sessions
