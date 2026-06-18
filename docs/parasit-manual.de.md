@@ -6,7 +6,7 @@
 
 - `./parasit.sh` startet nur den Watcher
 - `./parasit.sh setup [pfad]` richtet ein Projekt ein und startet den Watcher
-- `./bin/install-parasit.sh` installiert den globalen `parasit`-Launcher
+- `./bin/install-parasit.sh` installiert den globalen `parasit`-Launcher, damit du `parasit setup [pfad]` von überall nutzen kannst
 - `./parasit.sh fresh <name>` erstellt eine neue Session
 - `./parasit.sh fresh` nimmt den aktuellen Ordnernamen als Session-Namen
 - `./parasit.sh open <branch>` öffnet eine bestehende Session
