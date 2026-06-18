@@ -13,6 +13,7 @@
 - - `chat.txt` aus `bin/chat-template.md` befüllen
 - alte Inbox pro Session archivieren
 - `fresh` startet automatisch `./bin/watch-chat-first.sh`
+- optional kann der Watcher auch `prompt-concator` mitstarten
 
 ## Prinzip
 
@@ -59,9 +60,18 @@ cd /Users/eggermann/Desktop/speedProjects/modal-hacka
 /path/to/chatGPTtoTerminalProxy/parasit.sh fresh
 ```
 
+Direkt mit Zielpfad:
+
+```bash
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh /Users/eggermann/Desktop/speedProjects/modal-hacka
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh /Users/eggermann/Desktop/speedProjects/modal-hacka/get_started.py
+```
+
 Dann gilt:
 
 - Projektpfad ist der aktuelle Ordner
+- ein vorhandener Ordnerpfad wird direkt als Projektpfad verwendet
+- ein vorhandener Dateipfad wird auf seinen Ordner aufgelöst
 - `.codex-inbox/` liegt in diesem Ordner
 - als Session-Name wird standardmäßig `modal-hacka` verwendet
 

@@ -4,17 +4,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TOOL_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
-PROJECT_DIR="$(cd -- "$PROJECT_DIR" && pwd)"
-PROJECT_NAME="$(basename "$PROJECT_DIR")"
-INBOX_DIR="$PROJECT_DIR/.codex-inbox"
-INNER_GIT_DIR="$INBOX_DIR"
-STATE_FILE="$INBOX_DIR/session.json"
 CHAT_TEMPLATE="$SCRIPT_DIR/chat-template.md"
 SESSION_PREFIX="${SESSION_PREFIX:-codex/session}"
 DEFAULT_BASE_BRANCH="${DEFAULT_BASE_BRANCH:-main}"
-ARCHIVE_DIR="$INBOX_DIR/.archive"
 WATCHER_SCRIPT="$TOOL_ROOT/bin/watch-chat-first.sh"
-WATCH_PID_FILE="$INBOX_DIR/watch.pid"
+
+set_project_dir() {
+  PROJECT_DIR="$(cd -- "$1" && pwd)"
+  PROJECT_NAME="$(basename "$PROJECT_DIR")"
+  INBOX_DIR="$PROJECT_DIR/.codex-inbox"
+  INNER_GIT_DIR="$INBOX_DIR"
+  STATE_FILE="$INBOX_DIR/session.json"
+  ARCHIVE_DIR="$INBOX_DIR/.archive"
+  WATCH_PID_FILE="$INBOX_DIR/watch.pid"
+}
+
+set_project_dir "$PROJECT_DIR"
 
 die() {
   echo "$*" >&2
@@ -27,6 +32,35 @@ inbox_git() {
 
 require_project_dir() {
   [ -d "$PROJECT_DIR" ] || die "Project directory not found: $PROJECT_DIR"
+}
+
+resolve_fresh_target() {
+  local raw_input="${1:-}"
+  local resolved_dir=""
+  local session_name=""
+
+  if [ -n "$raw_input" ] && [ -e "$raw_input" ]; then
+    if [ -d "$raw_input" ]; then
+      resolved_dir="$(cd -- "$raw_input" && pwd)"
+    else
+      resolved_dir="$(cd -- "$(dirname -- "$raw_input")" && pwd)"
+    fi
+    session_name="$(basename "$resolved_dir")"
+  else
+    resolved_dir="$PROJECT_DIR"
+    session_name="${raw_input:-$PROJECT_NAME}"
+  fi
+
+  printf '%s\n%s\n' "$resolved_dir" "$session_name"
+}
+
+prepare_fresh_project() {
+  local raw_input="${1:-}"
+  local resolved_output resolved_dir
+
+  resolved_output="$(resolve_fresh_target "$raw_input")"
+  resolved_dir="$(printf '%s\n' "$resolved_output" | sed -n '1p')"
+  set_project_dir "$resolved_dir"
 }
 
 seed_git_identity() {
@@ -145,6 +179,8 @@ seed_fresh_inbox() {
     cat > "$INBOX_DIR/chat.txt" <<'EOF'
 You are working in a chat-first local project bridge.
 Read `.codex-inbox/memory.md` first.
+If `input-prompt.txt` exists and is maintained by prompt-concator, read it before scanning the repo manually.
+Treat `input-prompt.txt` as generated project context; if it looks stale, update `prompt.config.json` or rerun `npx prompt-concator` instead of pasting ad-hoc file dumps into chat.
 Write prompts and investigation notes into `.codex-inbox/chat.txt`.
 Grow the conversation in `.codex-inbox/conversation.md` as you learn more.
 Use `.codex-inbox/last-output.md` before deciding the next step.
@@ -242,10 +278,16 @@ sync_session_files() {
 
 new_session() {
   local raw_name="${1:-}"
-  local session_name branch base
+  local resolved_dir raw_session_name session_name branch base
+  local resolved_output
+
+  resolved_dir="$PROJECT_DIR"
+  resolved_output="$(resolve_fresh_target "$raw_name")"
+  raw_session_name="$(printf '%s\n' "$resolved_output" | sed -n '2p')"
+  require_project_dir
 
   base="$(base_branch)"
-  session_name="$(slugify "${raw_name:-$PROJECT_NAME}")"
+  session_name="$(slugify "${raw_session_name:-$PROJECT_NAME}")"
   [ -n "$session_name" ] || session_name="$(date +%Y%m%d-%H%M%S)"
   branch="$SESSION_PREFIX/$session_name"
 
@@ -341,26 +383,38 @@ EOF
 }
 
 main() {
-  require_project_dir
-  ensure_inbox
-  ensure_inbox_repo
-
   case "${1:-}" in
     fresh|new-session)
+      prepare_fresh_project "${2:-}"
+      require_project_dir
+      ensure_inbox
+      ensure_inbox_repo
       new_session "${2:-}"
       ;;
     open|open-session|switch-session)
+      require_project_dir
+      ensure_inbox
+      ensure_inbox_repo
       [ $# -ge 2 ] || die "Missing session branch."
       switch_session "$2"
       ;;
     delete|delete-session)
+      require_project_dir
+      ensure_inbox
+      ensure_inbox_repo
       [ $# -ge 2 ] || die "Missing session branch."
       delete_session "$2"
       ;;
     list|list-sessions)
+      require_project_dir
+      ensure_inbox
+      ensure_inbox_repo
       list_sessions
       ;;
     status)
+      require_project_dir
+      ensure_inbox
+      ensure_inbox_repo
       status
       ;;
     help|-h|--help|"")

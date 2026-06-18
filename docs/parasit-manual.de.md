@@ -10,6 +10,7 @@
 - `./parasit.sh open <branch>` öffnet eine bestehende Session
 - eine Session ist ein Git-Branch im inneren `.codex-inbox`-Repo mit Prefix `codex/session/`
 - `autocommit` steuert den Hinweistext und den Auto-Commit bei erfolgreichem Output
+- `promptConcator.enabled` startet optional `npx prompt-concator --watch`
 - `.codex-inbox` ist inneres Git-Repo und Datenbereich
 - `bin/` ist Tool-Bereich
 
@@ -34,6 +35,16 @@ cd /Users/eggermann/Desktop/speedProjects/modal-hacka
 
 entsteht also standardmäßig die Session `codex/session/modal-hacka`, und
 `.codex-inbox/` wird unter `modal-hacka/` aufgelöst.
+
+Alternativ kann `fresh` direkt einen vorhandenen Zielpfad annehmen:
+
+```bash
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh /Users/eggermann/Desktop/speedProjects/modal-hacka
+/path/to/chatGPTtoTerminalProxy/parasit.sh fresh /Users/eggermann/Desktop/speedProjects/modal-hacka/get_started.py
+```
+
+Ein Ordnerpfad wird direkt als Projektordner verwendet. Ein Dateipfad wird auf
+seinen Elternordner aufgelöst.
 
 ## Befehle
 
