@@ -5,7 +5,9 @@
 ## Kurzform
 
 - `./bin/install-parasit.sh` installiert den globalen `parasit`-Launcher, damit du `parasit setup [pfad]` von überall nutzen kannst
-- `parasit setup [pfad]` richtet ein Projekt ein, erstellt `.codex-inbox/` und startet den Watcher
+- `parasit setup [pfad]` richtet ein Projekt ein, erstellt die projektlokale `.codex-inbox/` und startet den Watcher
+- ein Ordnerpfad wird direkt als Projektordner verwendet, ein Dateipfad wird auf den Elternordner aufgelöst
+- wenn du `parasit setup` im Projektordner startest, wird der Ordnername als Session-Branch-Slug verwendet
 - `./parasit.sh` startet nur den Watcher
 - `./parasit.sh fresh <name>` erstellt eine neue Session
 - `./parasit.sh fresh` nimmt den aktuellen Ordnernamen als Session-Namen
@@ -47,6 +49,17 @@ Alternativ kann `fresh` direkt einen vorhandenen Zielpfad annehmen:
 
 Ein Ordnerpfad wird direkt als Projektordner verwendet. Ein Dateipfad wird auf
 seinen Elternordner aufgelöst.
+
+## Schnellstart
+
+```bash
+chmod +x ./bin/install-parasit.sh
+./bin/install-parasit.sh
+parasit setup /Users/eggermann/Desktop/speedProjects/modal-hacka
+```
+
+Danach liegt `.codex-inbox/` im Zielprojekt, und der Watcher läuft im Setup
+weiter.
 
 ## Befehle
 
